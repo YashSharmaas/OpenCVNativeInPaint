@@ -8,6 +8,7 @@ import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 
+import android.graphics.Path;
 import android.graphics.Point;
 import android.graphics.PointF;
 import android.graphics.PorterDuff;
@@ -36,9 +37,14 @@ public class DrawingView extends View {
 
     private PhotoView mPhotoView;
     private boolean isPinchZooming = false;
+
+    private Paint mCanvasPaint;
+    private Path currentPath;
+
+
     private boolean isDrawingEnabled = true;
     private PointF previewPoint;
-    private Paint mCanvasPaint;
+
     private float mBrushSize = 5f;
     private final int color = Color.parseColor("#80F80202"); // SEMI_TRANSPARENT_RED "#80F80202" "#FFFFFF"
     int alphaValue = 128;
@@ -53,6 +59,12 @@ public class DrawingView extends View {
     private float imageHeight;
     Context context;
     Magnifier magnifier;
+
+    float touchX, touchY;
+    private String originalExtension = ".png";
+    private float currentX, currentY;
+    private static final String TAG = "DrawingView";
+
 
 
     public DrawingView(Context context) {
@@ -84,6 +96,17 @@ public class DrawingView extends View {
                         .setOverlay(new CircularOverlayDrawable(getContext()))
                         .build();
             }
+
+        currentPath = new Path();
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
+            setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        }
+
+    }
+
+    public void setOriginalExtension(String extension) {
+        this.originalExtension = extension;
     }
 
     public void setImageDimensions(float width, float height) {
@@ -92,7 +115,10 @@ public class DrawingView extends View {
     }
 
     private boolean isWithinImageBounds(float x, float y) {
+
+        Log.d(TAG, "Checking Image Bounds for Coordinates: (" + x + ", " + y + ")");
         return x >= 0 && x <= imageWidth && y >= 0 && y <= imageHeight;
+
     }
 
     public void setupDrawing() {
@@ -101,7 +127,7 @@ public class DrawingView extends View {
             mCanvasPaint = new Paint();
             mCanvasPaint.setColor(semiTransparentColor);
             mCanvasPaint.setAntiAlias(true);
-            mCanvasPaint.setStyle(Paint.Style.FILL);
+            mCanvasPaint.setStyle(Paint.Style.STROKE);
             mCanvasPaint.setStrokeJoin(Paint.Join.ROUND);
             mCanvasPaint.setStrokeCap(Paint.Cap.ROUND);
         }
@@ -128,10 +154,22 @@ public class DrawingView extends View {
 
         canvas.save();
         canvas.concat(transformMatrix);
+        Log.d(TAG, "Transformation Matrix: " + transformMatrix.toString());
+
+
+        //Paint paint = mCanvasPaint;
+//        if (mTouchPointsHolder != null) {
+//            paint.setStyle(Paint.Style.STROKE);
+//        }
+
+        for (TouchPointsHolder touchPointsHolder : mHolderArrayList) {
+            /*for (Point point : touchPointsHolder.pointsList) {
+=======
 
         Paint paint = mCanvasPaint;
         for (TouchPointsHolder touchPointsHolder : mHolderArrayList) {
             for (Point point : touchPointsHolder.pointsList) {
+>>>>>>> dba5548b8acb21aca771fbd3f0aa1962be60be10
 
                 float adjustedX = (float) point.x;
                 float adjustedY = (float) point.y;
@@ -144,14 +182,30 @@ public class DrawingView extends View {
                 Log.d("TransformedCoordinates", "Transformed coordinates: " + adjustedX + ", " + adjustedY);
 
                 canvas.drawCircle(adjustedX, adjustedY, touchPointsHolder.getBrushThickness(), paint);
-            }
+<<<<<<< HEAD
+            }*/
+
+            mCanvasPaint.setColor(touchPointsHolder.getColor());
+            mCanvasPaint.setStrokeWidth(touchPointsHolder.getBrushThickness());
+
+
+            canvas.drawPath(touchPointsHolder.getPath(), mCanvasPaint);
         }
+
+        canvas.drawPath(currentPath, mCanvasPaint);
 
         canvas.restore();
 
+
         Log.d("DrawingView", "onDraw() ended");
 
-    }
+
+            }
+
+
+
+
+
     public File createMask(){
 
                 Drawable drawable = mPhotoView.getDrawable();
@@ -165,15 +219,24 @@ public class DrawingView extends View {
                 Paint tempPaint = new Paint(mCanvasPaint); // Create a temporary paint to store the color
                 mCanvasPaint.setColor(Color.WHITE);
 
-                for (TouchPointsHolder touchPointsHolder : mHolderArrayList) {
+                /*for (TouchPointsHolder touchPointsHolder : mHolderArrayList) {
                     for (Point point : touchPointsHolder.pointsList) {
 
                         float[] eventXY = new float[]{(float) point.x, (float) point.y};
                         //invertMatrix.mapPoints(eventXY);
                             canvas.drawCircle(eventXY[0], eventXY[1], touchPointsHolder.getBrushThickness(), mCanvasPaint);
-                        }
+                        }*/
 
-                }
+
+
+                    for (TouchPointsHolder touchPointsHolder : mHolderArrayList) {
+                        Path path = touchPointsHolder.getPath();
+                        mCanvasPaint.setColor(touchPointsHolder.getColor());
+                        mCanvasPaint.setStrokeWidth(touchPointsHolder.getBrushThickness());
+                        canvas.drawPath(path, mCanvasPaint);
+                    }
+
+
 
                     File privateDir = new File(context.getFilesDir(), "RemoveObj");
                     File maskImagesDir = new File(privateDir, "maskImages");
@@ -200,10 +263,17 @@ public class DrawingView extends View {
     }
 
 
+
     @Override
     public boolean onTouchEvent(MotionEvent event) {
 
+        int pointerIndex = event.getActionIndex();
+        int pointerCountt = event.getPointerId(pointerIndex);
+        int maskedAction = event.getActionMasked();
+
         int pointerCount = event.getPointerCount();
+
+
         /*int action = event.getActionMasked();
         // Update the flag whenever the action changes
         switch (action) {
@@ -221,15 +291,14 @@ public class DrawingView extends View {
         }*/
 
         if (pointerCount > 1) {
-            isDrawingEnabled = false;
+            isPinchZooming = false;
             if (mPhotoView != null) {
                 mPhotoView.dispatchTouchEvent(event);
             }
-            //Disabling draweing
-//            isPinchZooming = true;
-            isDrawingEnabled = false;
+
             return true;
-        }  else {
+        }
+  else {
 
             isDrawingEnabled = true;
 
@@ -241,6 +310,8 @@ public class DrawingView extends View {
 
             float touchX = touchPoint[0];
             float touchY = touchPoint[1];
+
+            Log.d(TAG, "Transformed Touch Coordinates: (" + touchX + ", " + touchY + ")");
 
             if (!isWithinImageBounds(touchX, touchY)) {
                 // If touch point is outside the image boundaries, return false to ignore the event
@@ -254,11 +325,19 @@ public class DrawingView extends View {
                         magnifier.show(event.getX(), event.getY());
                     }
 
-                    if (mTouchPointsHolder == null) {
+                    /*if (mTouchPointsHolder == null) {
                         mTouchPointsHolder = new TouchPointsHolder(semiTransparentColor, mBrushSize);
                         mTouchPointsHolder.addPoint(new Point((int) touchX, (int) touchY));
                     }
-                    mPreviousPoint = new PointF(touchX, touchY);
+                    mPreviousPoint = new PointF(touchX, touchY);*/
+
+                    startDrawing(touchX, touchY);
+
+//                    if (mTouchPointsHolder == null) {
+//                        mTouchPointsHolder = new TouchPointsHolder(semiTransparentColor, mBrushSize);
+//                        mTouchPointsHolder.addPoint(new Point((int) touchX, (int) touchY));
+//                    }
+//                    mPreviousPoint = new PointF(touchX, touchY);
                     invalidate();
                     break;
 
@@ -268,7 +347,7 @@ public class DrawingView extends View {
                         magnifier.show(event.getX(), event.getY());
                     }
 
-                    float dx = touchX - mPreviousPoint.x;
+                    /*float dx = touchX - mPreviousPoint.x;
                     float dy = touchY - mPreviousPoint.y;
                     float velocity = (float) Math.sqrt(dx * dx + dy * dy);
 
@@ -288,15 +367,16 @@ public class DrawingView extends View {
                                 Log.d("Point", "Added point: " + interpolatedX + ", " + interpolatedY);
                             }
                         }
+
                     }else {
 
                         mTouchPointsHolder.addPoint(new Point((int) touchX, (int) touchY));
-                    }
+                    }*/
 
                         //mTouchPointsHolder.addPoint(new Point((int) touchX, (int) touchY));
 
                         // Update previous point and invalidate to trigger redraw
-                        mPreviousPoint.set(touchX, touchY);
+//                        mPreviousPoint.set(touchX, touchY);
                        /* if (mTouchPointsHolder != null) {
                             mHolderArrayList.add(mTouchPointsHolder);
                             mTouchPointsHolder = new TouchPointsHolder(semiTransparentColor, mBrushSize);
@@ -311,6 +391,10 @@ public class DrawingView extends View {
                         mHolderArrayList.add(mTouchPointsHolder);
                         invalidate();
                     }*/
+
+                    continueDrawing(touchX, touchY);
+
+
                     invalidate();
                     break;
 
@@ -321,12 +405,15 @@ public class DrawingView extends View {
                         magnifier.dismiss();
                     }
 
-                    if (mTouchPointsHolder != null) {
+                    /*if (mTouchPointsHolder != null) {
                         mTouchPointsHolder.addPoint(new Point((int) touchX, (int) touchY));
                         mHolderArrayList.add(mTouchPointsHolder);
                         mTouchPointsHolder = null;
                         invalidate();
-                    }
+                    }*/
+
+                    stopDrawing();
+
                     //new newInpaintActivity.CreateMaskTask().execute();
                     break;
 
@@ -339,22 +426,111 @@ public class DrawingView extends View {
         return true;
     }
 
+    private void startDrawing(float x, float y) {
+        currentPath = new Path();
+        currentPath.moveTo(x, y);
+        currentX = x;
+        currentY = y;
+
+        mCanvasPaint.setColor(semiTransparentColor);
+        mCanvasPaint.setStrokeWidth(mBrushSize);
+
+    }
+
+    private void continueDrawing(float x, float y) {
+
+        float cx = (x + currentX) / 2;
+        float cy = (y + currentY) / 2;
+
+        currentPath.quadTo(currentX, currentY, cx, cy);
+
+        currentX = x;
+        currentY = y;
+
+        if (mTouchPointsHolder != null) {
+            mTouchPointsHolder.setBrushThickness(mBrushSize);
+        }
+
+    }
+
+    private void stopDrawing() {
+        // Add the completed path to the drawArrayList
+        TouchPointsHolder touchPointsHolder = new TouchPointsHolder(semiTransparentColor, mBrushSize);
+        touchPointsHolder.getPath().set(currentPath);
+        mHolderArrayList.add(touchPointsHolder);
+
+        // Reset the currentPath
+        currentPath.reset();
+    }
+
+
+   /* private void startDrawing(float x, float y) {
+        currentPath = new Path();
+        currentPath.moveTo(x, y);
+
+        mCanvasPaint.setColor(semiTransparentColor);
+        mCanvasPaint.setStrokeWidth(mBrushSize);
+    }
+
+    private void continueDrawing(float x, float y) {
+        currentPath.lineTo(x, y);
+    }
+
+    private void stopDrawing() {
+        // Add the completed path to the drawArrayList
+        TouchPointsHolder touchPointsHolder = new TouchPointsHolder(semiTransparentColor, mBrushSize);
+        touchPointsHolder.getPath().set(currentPath);
+        mHolderArrayList.add(touchPointsHolder);
+
+        // Reset the currentPath
+        currentPath.reset();
+    }*/
+
     public void setSizeForBrush(float progress) {
         // Define minimum and maximum brush sizes
         float minBrushSize = 5f;
         float maxBrushSize = 50f;
 
-        // Limit the brush size within the specified range
+        float resolutionFactor = 0.02f;
+        float adjustedBrushSize = progress + resolutionFactor * progress;
+
+
+        /*// Limit the brush size within the specified range
         if (progress < minBrushSize) {
             mBrushSize = minBrushSize;
         } else if (progress > maxBrushSize) {
             mBrushSize = maxBrushSize;
         } else {
             mBrushSize = progress;
-        }
+        }*/
+
+        mBrushSize = Math.max(minBrushSize, Math.min(adjustedBrushSize, maxBrushSize));
 
         // Set the stroke width for the paint
         mCanvasPaint.setStrokeWidth(mBrushSize);
+    }
+
+    public void updateBrushSizeForImage(float imageWidth, float imageHeight) {
+        // Calculate the average dimension to get a single representative value
+        float averageDimension = (imageWidth + imageHeight) / 2f;
+
+        // Define a maximum visible brush size
+        float maxVisibleBrushSize = 50f;
+
+        // Set a base brush size (you can adjust this value)
+        float baseBrushSize = 10f;
+
+        // Calculate the dynamic factor based on the resolution
+        float resolutionFactor = 1f - Math.min(1f, averageDimension / 2000f);
+
+        // Calculate the adjusted brush size using the dynamic factor
+        float adjustedBrushSize = baseBrushSize + baseBrushSize * resolutionFactor;
+
+        // Ensure the adjusted brush size stays within the maximum visible size
+        adjustedBrushSize = Math.min(adjustedBrushSize, maxVisibleBrushSize);
+
+        // Set the size for the brush
+        setSizeForBrush(adjustedBrushSize);
     }
 
    /* public void setSizeForBrush(float progress) {

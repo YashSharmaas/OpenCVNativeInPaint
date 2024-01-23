@@ -8,6 +8,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 
 import android.annotation.SuppressLint;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
@@ -32,8 +33,9 @@ import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.RelativeLayout;
 import android.widget.SeekBar;
+import android.widget.TextView;
 import android.widget.Toast;
-
+import android.webkit.MimeTypeMap;
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.request.target.CustomTarget;
 import com.bumptech.glide.request.transition.Transition;
@@ -73,8 +75,9 @@ public class InpaintActivity extends AppCompatActivity {
     boolean isOriginalImageDisplayed = true;
     float newSize;
     BrushPreviewView mBrushPreviewView;
-
     String sourcePathStr;
+    private TextView brushSizeText;
+
 
     static {
         System.loadLibrary("native-lib");
@@ -102,6 +105,7 @@ public class InpaintActivity extends AppCompatActivity {
         compareImg = findViewById(R.id.compareImage);
         mProgressBar = findViewById(R.id.progress_bar);
         mBrushPreviewView = findViewById(R.id.brushPreviewView);
+        brushSizeText = findViewById(R.id.brushSizeTextView);
 
         mProgressBar.setVisibility(View.GONE);
 
@@ -171,10 +175,16 @@ public class InpaintActivity extends AppCompatActivity {
         seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+
                 newSize = progress;
+                String brushTextSize = "Size: " + newSize;
+                brushSizeText.setText(brushTextSize);
+
                 Log.i("SeekBar Progress", "Progress: " + progress);
                 PointF previewPoint = new PointF(drawingView.getWidth() / 2f, drawingView.getHeight() / 2f);
                 mBrushPreviewView.updatePreview(previewPoint, newSize);
+
+
                 drawingView.setSizeForBrush(newSize);
             }
 
@@ -218,6 +228,8 @@ public class InpaintActivity extends AppCompatActivity {
 
                 drawingView.setImageDimensions(displayedImageWidth, displayedImageHeight);
 
+                drawingView.updateBrushSizeForImage(displayedImageWidth, displayedImageHeight);
+
                 drawingView.setTransformMatrix(newMatrix);
 //              drawingView.invalidate();
             }
@@ -240,6 +252,22 @@ public class InpaintActivity extends AppCompatActivity {
         return sourceImgDir;
     }
 
+    private File getMaskDIr(){
+        File maskImagesDir = new File(getAppDir(), "maskImages");
+        if (!maskImagesDir.exists()) {
+            maskImagesDir.mkdirs();
+        }
+        return maskImagesDir;
+    }
+
+ private File resultDir(){
+        File resultImagesDir = new File(getAppDir(), "result");
+        if (!resultImagesDir.exists()) {
+            resultImagesDir.mkdirs();
+        }
+        return resultImagesDir;
+    }
+
     private File getAppDir(){
         File privateDir = new File(context.getFilesDir(), "RemoveObj");
         if(!privateDir.exists()) { context.getCacheDir();
@@ -250,7 +278,7 @@ public class InpaintActivity extends AppCompatActivity {
 
     private void startInPiating(Uri maskURI) {
 
-        File sourceImgDir = new File(getAppDir(), "sourceImages");
+        /*File sourceImgDir = new File(getAppDir(), "sourceImages");
         if (!sourceImgDir.exists()){
             sourceImgDir.mkdirs();
         }
@@ -263,12 +291,12 @@ public class InpaintActivity extends AppCompatActivity {
         File inPaintedImgDir = new File(getAppDir(), "result");
         if (!inPaintedImgDir.exists()){
             inPaintedImgDir.mkdirs();
-        }
+        }*/
 
-        File inpaintFile = new File(inPaintedImgDir, System.currentTimeMillis() + ".png");
+        File inpaintFile = new File(getAppDir(), System.currentTimeMillis() + ".png");
 
         try {
-            File[] maskFiles = maskImagesDir.listFiles();
+            File[] maskFiles = getMaskDIr().listFiles();
 
             File lastModifiedMaskFile = null;
             long lastModifiedTime = Long.MIN_VALUE;
@@ -289,11 +317,11 @@ public class InpaintActivity extends AppCompatActivity {
             } else {
 
                 InputStream inputStream2 = context.getContentResolver().openInputStream(maskURI);
-                File maskFile = new File(maskImagesDir, System.currentTimeMillis() + ".png");
+                File maskFile = new File(getMaskDIr(), System.currentTimeMillis() + ".png");
                 FileOutputStream outStream2 = new FileOutputStream(maskFile);
                 IOUtils.copy(inputStream2, outStream2);
 
-                inpaintFile = new File(inPaintedImgDir, System.currentTimeMillis() + ".png");
+                inpaintFile = new File(resultDir(), System.currentTimeMillis() + ".png");
 
 
                 MyInPaintExample(sourcePathStr, maskFile.getPath(), inpaintFile.getPath(), (int) newSize);
@@ -468,5 +496,8 @@ public class InpaintActivity extends AppCompatActivity {
 
     public native void MyInPaintExample(String sourceImg, String maskImg, String inpaintImg, int patchSize);
 
+    private float mapValue(float value, float fromLow, float fromHigh, float toLow, float toHigh) {
+        return toLow + (value - fromLow) * (toHigh - toLow) / (fromHigh - fromLow);
+    }
 
 }

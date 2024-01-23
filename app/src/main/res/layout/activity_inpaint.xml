@@ -41,6 +41,8 @@
                 android:id="@+id/photo_view"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                android:layout_gravity="center"
+                android:adjustViewBounds="true"
 
                 />
             <!--Custom view is the overlapped view to PhotoView check by this android:background="@color/black"-->
@@ -49,7 +51,9 @@
                 android:id="@+id/drawingView"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:layout_gravity="center" />
+                android:layout_gravity="center"
+                android:adjustViewBounds="true"
+                />
 
             <com.example.yrmultimediaco.opencvnativeinpaint.BrushPreviewView
                 android:id="@+id/brushPreviewView"
@@ -92,14 +96,28 @@
         android:background="@color/white">
 
 
-        <SeekBar
-            android:id="@+id/seekBar"
-            android:layout_width="match_parent"
+        <TextView
+            android:id="@+id/brushSizeTextView"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_alignParentStart="true"
-            android:layout_alignParentEnd="true"
+            android:text="Size: 10"
+            android:layout_marginStart="10dp"
+            android:textColor="@android:color/black"
+            android:textSize="14sp"
             android:layout_marginLeft="10dp"
             android:layout_marginRight="10dp" />
+
+        <SeekBar
+            android:id="@+id/seekBar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_marginLeft="5dp"
+            android:layout_marginRight="10dp"
+            android:layout_toEndOf="@+id/brushSizeTextView" />
+
+
 
     </RelativeLayout>
 
