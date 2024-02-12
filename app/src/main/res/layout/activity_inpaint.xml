@@ -8,28 +8,103 @@
     android:orientation="vertical"
     tools:context=".InpaintActivity">
 
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:layout_alignParentStart="true"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentEnd="true"
+        android:background="@color/white">
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <ImageView
+                android:id="@+id/closeImage"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:padding="5dp"
+                android:layout_alignParentStart="true"
+                android:layout_centerInParent="true"
+                android:src="@drawable/baseline_close_24"
+                app:tint="@color/icon_color" />
+
+            <TextView
+                android:id="@+id/toolbarText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentTop="true"
+                android:layout_centerVertical="true"
+                android:layout_marginStart="17dp"
+                android:layout_marginTop="18dp"
+                android:layout_toEndOf="@+id/closeImage"
+                android:fontFamily="sans-serif-medium"
+                android:text="Magic Eraser"
+                android:textColor="@color/icon_color"
+                android:textSize="20sp" />
+
+            <ImageView
+                android:id="@+id/undoImage"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:padding="5dp"
+                android:layout_alignParentTop="true"
+                android:layout_centerVertical="true"
+                android:layout_marginTop="18dp"
+                android:layout_marginEnd="10dp"
+                android:layout_toStartOf="@+id/redoImage"
+                android:src="@drawable/baseline_undo_24"
+                app:tint="@color/icon_color" />
+
+            <ImageView
+                android:id="@+id/redoImage"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:padding="5dp"
+                android:layout_alignParentTop="true"
+                android:layout_centerVertical="true"
+                android:layout_marginTop="18dp"
+                android:layout_marginEnd="15dp"
+                android:layout_toStartOf="@id/done"
+                android:src="@drawable/baseline_redo_24"
+                app:tint="@color/icon_color" />
+
+            <ImageView
+                android:id="@+id/done"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:padding="5dp"
+                android:layout_alignParentTop="true"
+                android:layout_alignParentEnd="true"
+                android:layout_centerInParent="true"
+                android:layout_marginStart="15dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginEnd="15dp"
+                android:layout_marginBottom="15dp"
+                android:src="@drawable/baseline_done_24"
+                app:tint="@color/icon_color" />
+
+
+        </RelativeLayout>
+
+    </androidx.appcompat.widget.Toolbar>
+
     <RelativeLayout
         android:id="@+id/imageContainerLayout"
         android:layout_above="@id/optinContainerLayout"
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_height="match_parent"
+        android:layout_below="@id/toolbar"
         android:layout_marginTop="5dp"
         android:layout_alignParentEnd="true"
-        android:layout_alignParentStart="true"
-        android:layout_alignParentTop="true">
-
-        <!-- <ImageView
-             android:id="@+id/mainImageView"
-             android:layout_width="match_parent"
-             android:layout_height="wrap_content"
-             android:layout_alignParentBottom="true"
-             android:layout_alignParentTop="true"
-             android:src="@drawable/yash_pancard_cover" />-->
+        android:layout_alignParentStart="true">
 
         <FrameLayout
             android:id="@+id/frameLayoutOverlay"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
             android:layout_alignParentBottom="true"
             android:layout_alignParentTop="true"
             android:clickable="false"
@@ -41,7 +116,6 @@
                 android:id="@+id/photo_view"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:layout_gravity="center"
                 android:adjustViewBounds="true"
 
                 />
@@ -51,7 +125,6 @@
                 android:id="@+id/drawingView"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:layout_gravity="center"
                 android:adjustViewBounds="true"
                 />
 
@@ -74,7 +147,9 @@
             android:layout_marginEnd="15dp"
             android:src="@drawable/baseline_compare_24"
             app:tint="@color/icon_color"
-            android:clickable="true"/>
+            android:clickable="true"
+            android:focusableInTouchMode="true"
+            android:focusable="true"/>
 
         <ProgressBar
             android:id="@+id/progress_bar"
@@ -87,7 +162,7 @@
     <RelativeLayout
         android:id="@+id/expandedLayout"
         android:layout_width="match_parent"
-        android:layout_height="35dp"
+        android:layout_height="55dp"
         android:gravity="center"
         android:visibility="visible"
         android:layout_alignParentStart="true"
@@ -95,31 +170,130 @@
         android:layout_above="@+id/optinContainerLayout"
         android:background="@color/white">
 
-
         <TextView
             android:id="@+id/brushSizeTextView"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_alignParentStart="true"
-            android:text="Size: 10"
+            android:layout_alignParentBottom="true"
             android:layout_marginStart="10dp"
+            android:text="Size: 10"
             android:textColor="@android:color/black"
-            android:textSize="14sp"
-            android:layout_marginLeft="10dp"
-            android:layout_marginRight="10dp" />
+            android:textSize="14sp" />
 
         <SeekBar
             android:id="@+id/seekBar"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_alignTop="@+id/brushSizeTextView"
             android:layout_alignParentEnd="true"
-            android:layout_marginLeft="5dp"
-            android:layout_marginRight="10dp"
+            android:layout_alignParentBottom="true"
+            android:layout_marginEnd="5dp"
+            android:layout_marginStart="10dp"
             android:layout_toEndOf="@+id/brushSizeTextView" />
 
-
-
     </RelativeLayout>
+
+     <RelativeLayout
+        android:id="@+id/brushTypeExpandedLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:visibility="gone"
+        android:layout_alignParentStart="true"
+        android:layout_alignParentEnd="true"
+        android:layout_above="@+id/optinContainerLayout"
+        android:background="@color/white">
+
+         <LinearLayout
+             android:id="@+id/brushTypeFreeHandBtnLayout"
+             android:layout_width="wrap_content"
+             android:layout_height="wrap_content"
+             android:layout_marginTop="5dp"
+             android:layout_marginBottom="5dp"
+             android:layout_toStartOf="@+id/brushTypeRectangleBtnLayout"
+             android:gravity="center"
+             android:orientation="vertical"
+             android:padding="10dp">
+
+             <ImageView
+                 android:id="@+id/brushTypeFreeHandImage"
+                 android:layout_width="24dp"
+                 android:layout_height="24dp"
+                 android:src="@drawable/baseline_back_hand_24"
+                 app:tint="@color/icon_color" />
+
+             <TextView
+                 android:id="@+id/brushTypeFreeHandTxt"
+                 android:layout_width="wrap_content"
+                 android:layout_height="wrap_content"
+                 android:text="Free Hand"
+                 android:textColor="@color/icon_color"
+                 android:textSize="14sp" />
+
+         </LinearLayout>
+
+         <LinearLayout
+             android:id="@+id/brushTypeRectangleBtnLayout"
+             android:layout_width="wrap_content"
+             android:layout_height="wrap_content"
+             android:layout_marginTop="5dp"
+             android:layout_marginBottom="5dp"
+             android:layout_toStartOf="@+id/brushTypeStraightLineBtn"
+             android:gravity="center"
+             android:orientation="vertical"
+             android:padding="10dp">
+
+             <ImageView
+                 android:id="@+id/brushTypeRectangleImage"
+                 android:layout_width="24dp"
+                 android:layout_height="24dp"
+                 android:src="@drawable/baseline_format_shapes_24"
+                 app:tint="@color/icon_color" />
+
+             <TextView
+                 android:id="@+id/brushTypeRectangleTxt"
+                 android:layout_width="wrap_content"
+                 android:layout_height="wrap_content"
+                 android:text="Rectangle"
+                 android:textColor="@color/icon_color"
+                 android:textSize="14sp" />
+
+         </LinearLayout>
+
+         <LinearLayout
+             android:id="@+id/brushTypeStraightLineBtn"
+             android:layout_width="wrap_content"
+             android:layout_height="wrap_content"
+             android:layout_alignParentEnd="true"
+             android:layout_marginTop="5dp"
+             android:layout_marginBottom="5dp"
+             android:gravity="center"
+             android:orientation="vertical"
+             android:padding="10dp">
+
+             <ImageView
+                 android:id="@+id/brushTypeStraightLineImage"
+                 android:layout_width="24dp"
+                 android:layout_height="24dp"
+                 android:src="@drawable/baseline_border_color_24"
+                 app:tint="@color/icon_color" />
+
+             <TextView
+                 android:id="@+id/brushTypeStraightLineTxt"
+                 android:layout_width="wrap_content"
+                 android:layout_height="wrap_content"
+                 android:text="Straight Line"
+                 android:textColor="@color/icon_color"
+                 android:textSize="14sp" />
+
+         </LinearLayout>
+
+
+
+     </RelativeLayout>
+
+
 
     <RelativeLayout
         android:id="@+id/optinContainerLayout"
@@ -139,13 +313,14 @@
             android:gravity="center"
             android:orientation="horizontal">
 
-            <ImageView
+            <!--<ImageView
                 android:id="@+id/closeImage"
                 android:layout_width="55dp"
                 android:layout_height="match_parent"
                 android:src="@drawable/baseline_close_24"
                 android:layout_margin="15dp"
                 app:tint="@color/icon_color"
+                android:visibility="gone"
                 />
 
             <ImageView
@@ -154,31 +329,135 @@
                 android:layout_height="35dp"
                 android:src="@drawable/baseline_undo_24"
                 android:layout_margin="15dp"
-                app:tint="@color/icon_color"/>
+                android:visibility="gone"
+                app:tint="@color/icon_color"/>-->
 
-            <ImageView
-                android:id="@+id/brushImage"
-                android:layout_width="55dp"
-                android:layout_height="35dp"
-                android:src="@drawable/baseline_brush_24"
-                android:layout_margin="15dp"
-                app:tint="@color/icon_color"/>
 
-            <ImageView
+
+            <LinearLayout
+                android:id="@+id/brushTypeCointainer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="10dp"
+                android:layout_marginBottom="5dp"
+                android:layout_marginTop="5dp"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <ImageView
+                    android:id="@+id/brushTypeIconImage"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/baseline_mode_24"
+                    app:tint="@color/icon_color" />
+
+                <TextView
+                    android:id="@+id/brushTypeIconTxt"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Brush Type"
+                    android:textColor="@color/icon_color"
+                    android:textSize="14sp" />
+
+            </LinearLayout>
+
+
+            <LinearLayout
+                android:id="@+id/seekBarSelectionBtnLayout"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="10dp"
+                android:layout_marginStart="15dp"
+                android:layout_marginBottom="5dp"
+                android:layout_marginTop="5dp"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <ImageView
+                    android:id="@+id/brushImage"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/baseline_brush_24"
+                    app:tint="@color/icon_color" />
+
+                <TextView
+                    android:id="@+id/seekBarTxt"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Brush Size"
+                    android:textColor="@color/icon_color"
+                    android:textSize="14sp" />
+
+            </LinearLayout>
+
+
+
+           <!-- <ImageView
                 android:id="@+id/redoImage"
                 android:layout_width="55dp"
                 android:layout_height="35dp"
                 android:src="@drawable/baseline_redo_24"
                 android:layout_margin="15dp"
-                app:tint="@color/icon_color"/>
+                android:visibility="gone"
+                app:tint="@color/icon_color"/>-->
 
-            <ImageView
-                android:id="@+id/doneImage"
-                android:layout_width="55dp"
-                android:layout_height="35dp"
-                android:src="@drawable/baseline_done_24"
-                android:layout_margin="15dp"
-                app:tint="@color/icon_color"/>
+            <LinearLayout
+                android:id="@+id/inPaintedImageBtnLayout"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="15dp"
+                android:padding="10dp"
+                android:layout_marginBottom="5dp"
+                android:layout_marginTop="5dp"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <ImageView
+                    android:id="@+id/inPaintImage"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/baseline_draw_24"
+                    app:tint="@color/icon_color" />
+
+                <TextView
+                    android:id="@+id/inPaintTxt"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Remove"
+                    android:textColor="@color/icon_color"
+                    android:textSize="14sp" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/resetLayout"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="15dp"
+                android:padding="10dp"
+                android:layout_marginBottom="5dp"
+                android:layout_marginTop="5dp"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <ImageView
+                    android:id="@+id/resetImage"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/baseline_settings_backup_restore_24"
+                    app:tint="@color/icon_color" />
+
+                <TextView
+                    android:id="@+id/resetTxt"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Reset"
+                    android:textColor="@color/icon_color"
+                    android:textSize="14sp" />
+
+            </LinearLayout>
+
+
 
         </LinearLayout>
 

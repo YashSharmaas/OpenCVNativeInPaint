@@ -9,15 +9,20 @@ class TouchPointsHolder {
     int color;
     float brushThickness;
     ArrayList<Point> pointsList;
+    boolean isStraightLine;
+    boolean isRectangle;
     private Path path;
 
-    public TouchPointsHolder(int color, float brushThickness) {
+    public TouchPointsHolder(int color, float brushThickness, boolean isStraightLine, boolean isRectangle) {
         this.color = color;
         this.brushThickness = brushThickness;
         this.pointsList = new ArrayList<>();
+        this.isStraightLine = isStraightLine;
+        this.isRectangle = isRectangle;
 
         path = new Path();
     }
+
 
     public void addPoint(Point point){
         //this.pointsList.add(point);
@@ -52,4 +57,19 @@ class TouchPointsHolder {
         this.brushThickness = brushThickness;
     }
 
+    public boolean isStraightLine() {
+        return isStraightLine;
+    }
+
+    public void setStraightLine(boolean straightLine) {
+        isStraightLine = straightLine;
+    }
+
+    public boolean isRectangle() {
+        return isRectangle;
+    }
+
+    public void setRectangle(boolean rectangle) {
+        isRectangle = rectangle;
+    }
 }

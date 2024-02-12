@@ -3,6 +3,7 @@ package com.example.yrmultimediaco.opencvnativeinpaint;
 import android.app.Activity;
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Matrix;
@@ -12,18 +13,25 @@ import android.graphics.Path;
 import android.graphics.Point;
 import android.graphics.PointF;
 import android.graphics.PorterDuff;
+import android.graphics.RectF;
+import android.graphics.Region;
 import android.graphics.drawable.Drawable;
 import android.media.MediaScannerConnection;
 import android.os.Build;
 import android.os.Environment;
 import android.util.AttributeSet;
+import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.TypedValue;
+import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 import android.view.View;
 import android.widget.Magnifier;
 
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.github.chrisbanes.photoview.PhotoView;
 
@@ -37,34 +45,35 @@ public class DrawingView extends View {
 
     private PhotoView mPhotoView;
     private boolean isPinchZooming = false;
-
+    private boolean isDrawingEnabled = true;
     private Paint mCanvasPaint;
     private Path currentPath;
-
-
-    private boolean isDrawingEnabled = true;
-    private PointF previewPoint;
-
-    private float mBrushSize = 5f;
+    private float mBrushSize = 15f;
     private final int color = Color.parseColor("#80F80202"); // SEMI_TRANSPARENT_RED "#80F80202" "#FFFFFF"
     int alphaValue = 128;
     int semiTransparentColor = Color.argb(alphaValue, Color.red(color), Color.green(color), Color.blue(color));
     private Matrix transformMatrix = new Matrix();
-    private PointF mPreviousPoint;
-    private static final float VELOCITY_TOLERANCE = 2.0f;
     private ArrayList<TouchPointsHolder> mPathsUndoo = new ArrayList<>();
-    TouchPointsHolder mTouchPointsHolder;
-    ArrayList<TouchPointsHolder> mHolderArrayList = new ArrayList<>();
+    private TouchPointsHolder mTouchPointsHolder;
+    private ArrayList<TouchPointsHolder> mHolderArrayList = new ArrayList<>();
     private float imageWidth;
     private float imageHeight;
     Context context;
-    Magnifier magnifier;
-
-    float touchX, touchY;
+    private Magnifier magnifier;
     private String originalExtension = ".png";
     private float currentX, currentY;
     private static final String TAG = "DrawingView";
-
+    private Paint mFilledRectanglePaint;
+    private boolean isStraightLineMode = false;
+    private boolean isFreeHandMode = false;
+    private PointF startStraightLinePoint;
+    private boolean isRectangleMode = false;
+    private float startX, startY, endX, endY;
+    private boolean isDraggingRectangle = false;
+    private float lastTouchX, lastTouchY;
+    private RectF photoViewBounds; // A field to store the photoView bounds
+    Float scaleFactor;
+    BrushPreviewView mBrushPreviewView;
 
 
     public DrawingView(Context context) {
@@ -99,9 +108,15 @@ public class DrawingView extends View {
 
         currentPath = new Path();
 
+            if (mTouchPointsHolder != null){
+                mTouchPointsHolder = new TouchPointsHolder(semiTransparentColor, mTouchPointsHolder.getBrushThickness(), false, false);
+            }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
             setLayerType(View.LAYER_TYPE_HARDWARE, null);
         }
+
+        mBrushPreviewView = new BrushPreviewView(context);
 
     }
 
@@ -114,25 +129,57 @@ public class DrawingView extends View {
         this.imageHeight = height;
     }
 
-    private boolean isWithinImageBounds(float x, float y) {
+    public void setBrushSize(float size) {
+        this.mBrushSize = size;
+    }
 
-        Log.d(TAG, "Checking Image Bounds for Coordinates: (" + x + ", " + y + ")");
-        return x >= 0 && x <= imageWidth && y >= 0 && y <= imageHeight;
 
+    public void setTransformMatrix(Matrix matrix) {
+        transformMatrix.set(matrix);
+        invalidate();
     }
 
     public void setupDrawing() {
 
-        if (mCanvasPaint == null) {
+        if (mCanvasPaint == null && mFilledRectanglePaint == null) {
             mCanvasPaint = new Paint();
             mCanvasPaint.setColor(semiTransparentColor);
             mCanvasPaint.setAntiAlias(true);
             mCanvasPaint.setStyle(Paint.Style.STROKE);
             mCanvasPaint.setStrokeJoin(Paint.Join.ROUND);
             mCanvasPaint.setStrokeCap(Paint.Cap.ROUND);
+            mCanvasPaint.setStrokeWidth(mBrushSize);
+
+            mFilledRectanglePaint = new Paint();
+            mFilledRectanglePaint.setColor(semiTransparentColor);
+            mFilledRectanglePaint.setStyle(Paint.Style.FILL);
+            mFilledRectanglePaint.setAntiAlias(true);
+            mFilledRectanglePaint.setStrokeJoin(Paint.Join.ROUND);
+            mFilledRectanglePaint.setStrokeCap(Paint.Cap.ROUND);
+
         }
         mPhotoView = ((Activity) getContext()).findViewById(R.id.photo_view);
 
+    }
+
+    public void setScaleFactor(float scaleFactor) {
+        this.scaleFactor = scaleFactor;
+    }
+
+    public void setStraightLineMode(boolean straightLineMode) {
+        isStraightLineMode = straightLineMode;
+        //startStraightLinePoint = null;
+        invalidate();
+    }
+
+    public void setFreeHandMode(boolean freeHandMode) {
+        isFreeHandMode = freeHandMode;
+        invalidate();
+    }
+
+    public void setRectangleMode(boolean rectangleMode) {
+        isRectangleMode = rectangleMode;
+        invalidate();
     }
 
     public void setPhotoView(PhotoView photoView){
@@ -141,117 +188,139 @@ public class DrawingView extends View {
         }
     }
 
-    public void setTransformMatrix(Matrix matrix) {
-        transformMatrix.set(matrix);
-        invalidate();
+    public void setPhotoViewBounds(RectF rect) {
+        this.photoViewBounds = rect;
     }
-
 
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         Log.d("DrawingView", "onDraw() called");
 
+        // Clip the canvas to the photoView bounds
+        if (photoViewBounds != null) {
+            canvas.clipRect(photoViewBounds);
+        }
+
         canvas.save();
         canvas.concat(transformMatrix);
         Log.d(TAG, "Transformation Matrix: " + transformMatrix.toString());
 
-
-        //Paint paint = mCanvasPaint;
-//        if (mTouchPointsHolder != null) {
-//            paint.setStyle(Paint.Style.STROKE);
-//        }
-
         for (TouchPointsHolder touchPointsHolder : mHolderArrayList) {
-            /*for (Point point : touchPointsHolder.pointsList) {
-=======
 
-        Paint paint = mCanvasPaint;
-        for (TouchPointsHolder touchPointsHolder : mHolderArrayList) {
-            for (Point point : touchPointsHolder.pointsList) {
->>>>>>> dba5548b8acb21aca771fbd3f0aa1962be60be10
+            if (isStraightLineMode && startStraightLinePoint != null) {
 
-                float adjustedX = (float) point.x;
-                float adjustedY = (float) point.y;
+                mCanvasPaint.setColor(touchPointsHolder.getColor());
+                mCanvasPaint.setStrokeWidth(touchPointsHolder.getBrushThickness());
 
-                // Log the brush thickness for each drawn circle
-                Log.d("BrushThickness", "Brush Thickness: " + touchPointsHolder.getBrushThickness());
+                canvas.drawPath(touchPointsHolder.getPath(), mCanvasPaint);
+            }else if (isRectangleMode && touchPointsHolder.isRectangle()) {
 
-                paint.setStrokeWidth(touchPointsHolder.brushThickness);
-                // Add this code in your for loop before calling canvas.drawCircle()
-                Log.d("TransformedCoordinates", "Transformed coordinates: " + adjustedX + ", " + adjustedY);
+                mFilledRectanglePaint.setColor(touchPointsHolder.getColor());
+                mFilledRectanglePaint.setStrokeWidth(touchPointsHolder.getBrushThickness());
 
-                canvas.drawCircle(adjustedX, adjustedY, touchPointsHolder.getBrushThickness(), paint);
-<<<<<<< HEAD
-            }*/
+                canvas.drawPath(touchPointsHolder.getPath(), mFilledRectanglePaint);
 
-            mCanvasPaint.setColor(touchPointsHolder.getColor());
-            mCanvasPaint.setStrokeWidth(touchPointsHolder.getBrushThickness());
+            }  else {
 
+                mCanvasPaint.setColor(touchPointsHolder.getColor());
+                mCanvasPaint.setStrokeWidth(touchPointsHolder.getBrushThickness());
 
-            canvas.drawPath(touchPointsHolder.getPath(), mCanvasPaint);
+                canvas.drawPath(touchPointsHolder.getPath(), mCanvasPaint);
+            }
+
+            //canvas.drawPath(touchPointsHolder.getPath(), mCanvasPaint);
         }
 
-        canvas.drawPath(currentPath, mCanvasPaint);
+        if (currentPath != null && mTouchPointsHolder != null) {
+
+            if (isRectangleMode){
+                mFilledRectanglePaint.setColor(semiTransparentColor);
+                mFilledRectanglePaint.setStrokeWidth(mTouchPointsHolder.getBrushThickness());
+
+                canvas.drawPath(currentPath, mFilledRectanglePaint);
+            } else {
+                mCanvasPaint.setColor(semiTransparentColor);
+                mCanvasPaint.setStrokeWidth(mTouchPointsHolder.getBrushThickness());
+
+                canvas.drawPath(currentPath, mCanvasPaint);
+            }
+        }
 
         canvas.restore();
 
-
         Log.d("DrawingView", "onDraw() ended");
 
+    }
 
+
+    public File createMask(String originalImagePath) {
+        Bitmap originalImage = BitmapFactory.decodeFile(originalImagePath);
+        int originalWidth = originalImage.getWidth();
+        int originalHeight = originalImage.getHeight();
+
+        //updateBrushSizeForImage(originalWidth, originalHeight);
+
+        Drawable drawable = mPhotoView.getDrawable();
+        int resizedWidth = drawable.getIntrinsicWidth();
+        int resizedHeight = drawable.getIntrinsicHeight();
+
+        // Create the mask image with original image dimensions
+        Bitmap maskImg = Bitmap.createBitmap(originalWidth, originalHeight, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(maskImg);
+        canvas.drawColor(Color.BLACK);
+
+        Paint tempPaint = new Paint(mCanvasPaint);
+        mCanvasPaint.setColor(Color.WHITE);
+        mFilledRectanglePaint.setColor(Color.WHITE);
+
+        // Scale the path to match the original image dimensions
+        Matrix matrix = new Matrix();
+        matrix.postScale((float) originalWidth / resizedWidth, (float) originalHeight / resizedHeight);
+
+        for (TouchPointsHolder touchPointsHolder : mHolderArrayList) {
+
+            Path path = touchPointsHolder.getPath();
+            path.transform(matrix);
+
+            if (touchPointsHolder.isStraightLine()) {
+                // Handle straight line case
+
+                // Draw the straight line on the canvas
+                mCanvasPaint.setStrokeWidth(touchPointsHolder.getBrushThickness());
+                canvas.drawPath(path, mCanvasPaint);
+
+            } else if (touchPointsHolder.isRectangle()) {
+                mFilledRectanglePaint.setStrokeWidth(touchPointsHolder.getBrushThickness());
+                canvas.drawPath(path, mFilledRectanglePaint);
+
+            } else {
+                // Handle freehand drawing path case
+
+                // Draw the path on the canvas
+                mCanvasPaint.setStrokeWidth(touchPointsHolder.getBrushThickness());
+                canvas.drawPath(path, mCanvasPaint);
             }
+        }
 
 
+        // Save the mask image to the cache folder
+        File privateDir = new File(context.getFilesDir(), "RemoveObj");
+        File maskImagesDir = new File(privateDir, "maskImages");
+        if (!maskImagesDir.exists()) {
+            maskImagesDir.mkdirs();
+        }
 
+        File maskFile = saveBitmapToCache(maskImg, maskImagesDir);
 
+        // Recycle the bitmaps to free up memory
+        maskImg.recycle();
 
-    public File createMask(){
+        // Reset the canvas color back to transparent
+        canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR);
 
-                Drawable drawable = mPhotoView.getDrawable();
-                int imageWidth = drawable.getIntrinsicWidth();
-                int imageHeight = drawable.getIntrinsicHeight();
-
-                Bitmap maskImg = Bitmap.createBitmap(imageWidth, imageHeight, Bitmap.Config.ARGB_8888);
-                Canvas canvas = new Canvas(maskImg);
-                canvas.drawColor(Color.BLACK);
-
-                Paint tempPaint = new Paint(mCanvasPaint); // Create a temporary paint to store the color
-                mCanvasPaint.setColor(Color.WHITE);
-
-                /*for (TouchPointsHolder touchPointsHolder : mHolderArrayList) {
-                    for (Point point : touchPointsHolder.pointsList) {
-
-                        float[] eventXY = new float[]{(float) point.x, (float) point.y};
-                        //invertMatrix.mapPoints(eventXY);
-                            canvas.drawCircle(eventXY[0], eventXY[1], touchPointsHolder.getBrushThickness(), mCanvasPaint);
-                        }*/
-
-
-
-                    for (TouchPointsHolder touchPointsHolder : mHolderArrayList) {
-                        Path path = touchPointsHolder.getPath();
-                        mCanvasPaint.setColor(touchPointsHolder.getColor());
-                        mCanvasPaint.setStrokeWidth(touchPointsHolder.getBrushThickness());
-                        canvas.drawPath(path, mCanvasPaint);
-                    }
-
-
-
-                    File privateDir = new File(context.getFilesDir(), "RemoveObj");
-                    File maskImagesDir = new File(privateDir, "maskImages");
-                    if (!maskImagesDir.exists()) {
-                        maskImagesDir.mkdirs();
-                    }
-
-                File maskFile = saveBitmapToCache(maskImg, maskImagesDir);
-                maskImg.recycle();
-
-                // Reset the canvas color back to transparent
-                canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR);
-
-                // Reset the paint color to its original state
-                mCanvasPaint.setColor(tempPaint.getColor());
+        // Reset the paint color to its original state
+        mCanvasPaint.setColor(tempPaint.getColor());
 
         return maskFile;
     }
@@ -262,169 +331,255 @@ public class DrawingView extends View {
         invalidate();
     }
 
-
-
     @Override
     public boolean onTouchEvent(MotionEvent event) {
 
-        int pointerIndex = event.getActionIndex();
-        int pointerCountt = event.getPointerId(pointerIndex);
-        int maskedAction = event.getActionMasked();
-
         int pointerCount = event.getPointerCount();
 
-
-        /*int action = event.getActionMasked();
-        // Update the flag whenever the action changes
-        switch (action) {
-            case MotionEvent.ACTION_POINTER_DOWN:
-            case MotionEvent.ACTION_POINTER_UP:
-                // If there is more than one pointer, the user is zooming
-                isPinchZooming = pointerCount > 1;
-                break;
-            case MotionEvent.ACTION_DOWN:
-            case MotionEvent.ACTION_UP:
-            case MotionEvent.ACTION_CANCEL:
-                // If there is only one pointer, the user is drawing
-                isPinchZooming = false;
-                break;
-        }*/
-
         if (pointerCount > 1) {
-            isPinchZooming = false;
+            isPinchZooming = true;
+            isDrawingEnabled = false;
             if (mPhotoView != null) {
                 mPhotoView.dispatchTouchEvent(event);
             }
 
             return true;
         }
-  else {
+        else {
 
-            isDrawingEnabled = true;
+           if(isPinchZooming){
+               isPinchZooming = false;
+               isDrawingEnabled = true;
+               return true;
+           }else {
+               Matrix inverseMatrix = new Matrix();
+               transformMatrix.invert(inverseMatrix);
 
-            Matrix inverseMatrix = new Matrix();
-            transformMatrix.invert(inverseMatrix);
+               float[] touchPoint = { event.getX(), event.getY() };
+               inverseMatrix.mapPoints(touchPoint);
 
-            float[] touchPoint = { event.getX(), event.getY() };
-            inverseMatrix.mapPoints(touchPoint);
+               float touchX = touchPoint[0];
+               float touchY = touchPoint[1];
 
-            float touchX = touchPoint[0];
-            float touchY = touchPoint[1];
+               Log.d(TAG, "Transformed Touch Coordinates: (" + touchX + ", " + touchY + ")");
 
-            Log.d(TAG, "Transformed Touch Coordinates: (" + touchX + ", " + touchY + ")");
+               switch (event.getAction()) {
+                   case MotionEvent.ACTION_DOWN:
 
-            if (!isWithinImageBounds(touchX, touchY)) {
-                // If touch point is outside the image boundaries, return false to ignore the event
-                return false;
-            }
+                       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                           magnifier.show(event.getX(), event.getY());
+                       }
 
-            switch (event.getAction()) {
-                case MotionEvent.ACTION_DOWN:
+                       if (isRectangleMode){
 
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        magnifier.show(event.getX(), event.getY());
-                    }
+                           boolean found = false;
+                           for (TouchPointsHolder holder : mHolderArrayList) {
+                               Path path = holder.getPath();
+                               // Create a Region object from the path
+                               Region region = new Region();
+                               region.setPath(path, new Region(0, 0, getWidth(), getHeight()));
+                               // Use the contains method of the Region class to check if it contains the touch point
+                               if (region.contains((int) touchX, (int) touchY)) {
+                                   // Select the existing rectangle and set the dragging flag to true
+                                   currentPath = path;
+                                   RectF bounds = new RectF();
+                                   path.computeBounds(bounds, true);
+                                   startX = bounds.left;
+                                   startY = bounds.top;
+                                   endX = bounds.right;
+                                   endY = bounds.bottom;
+                                   isDraggingRectangle = true;
+                                   lastTouchX = touchX;
+                                   lastTouchY = touchY;
+                                   found = true;
+                                   break;
+                               }
+                           }
+                           if (!found) {
+                               // No existing rectangle found, check if drawing is enabled
+                               if (!isDrawingEnabled) {
+                                   // Drawing is disabled, return false to ignore the event
+                                   return false;
+                               }
+                               // Drawing is enabled, create a new rectangle as before
+                               startRectangleDrawing(touchX, touchY);
+                           }
 
-                    /*if (mTouchPointsHolder == null) {
-                        mTouchPointsHolder = new TouchPointsHolder(semiTransparentColor, mBrushSize);
-                        mTouchPointsHolder.addPoint(new Point((int) touchX, (int) touchY));
-                    }
-                    mPreviousPoint = new PointF(touchX, touchY);*/
+                       }
+                       else if (isStraightLineMode) {
+                           startStraightLineDrawing(touchX, touchY);
 
-                    startDrawing(touchX, touchY);
+                       } else {
+                           startDrawing(touchX, touchY);
+                       }
 
-//                    if (mTouchPointsHolder == null) {
-//                        mTouchPointsHolder = new TouchPointsHolder(semiTransparentColor, mBrushSize);
-//                        mTouchPointsHolder.addPoint(new Point((int) touchX, (int) touchY));
-//                    }
-//                    mPreviousPoint = new PointF(touchX, touchY);
-                    invalidate();
-                    break;
+                       invalidate();
+                       break;
 
-                case MotionEvent.ACTION_MOVE:
+                   case MotionEvent.ACTION_MOVE:
 
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                        magnifier.show(event.getX(), event.getY());
-                    }
+                       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                           magnifier.show(event.getX(), event.getY());
+                       }
 
-                    /*float dx = touchX - mPreviousPoint.x;
-                    float dy = touchY - mPreviousPoint.y;
-                    float velocity = (float) Math.sqrt(dx * dx + dy * dy);
+                           if (isRectangleMode){
 
-                    // Add intermediate points based on velocity for smoother drawing
-                    if (velocity > VELOCITY_TOLERANCE) {
-                        int steps = (int) (velocity / VELOCITY_TOLERANCE);
-                        float stepX = dx / steps;
-                        float stepY = dy / steps;
+                                   if (isDraggingRectangle) {
+                                       // Moving an existing rectangle, just update the currentPath by the displacement
+                                       float dx = touchX - lastTouchX;
+                                       float dy = touchY - lastTouchY;
+                                       currentPath.offset(dx, dy);
+                                       startX += dx;
+                                       startY += dy;
+                                       endX += dx;
+                                       endY += dy;
+                                       lastTouchX = touchX;
+                                       lastTouchY = touchY;
+                                   } else {
+                                       // Drawing a new rectangle, call the moveRectangle method as before
 
-                        for (int i = 0; i < steps; i++) {
-                            float interpolatedX = mPreviousPoint.x + stepX * i;
-                            float interpolatedY = mPreviousPoint.y + stepY * i;
-                            if (isWithinImageBounds(interpolatedX, interpolatedY)) {
-                                mTouchPointsHolder.addPoint(new Point((int) interpolatedX, (int) interpolatedY));
+                                       continueRectangleDrawing(touchX, touchY);
+                                   }
 
-                                // Log points here for verification
-                                Log.d("Point", "Added point: " + interpolatedX + ", " + interpolatedY);
-                            }
-                        }
+                           }
+                           else if (isStraightLineMode) {
 
-                    }else {
+                               continueStraightLineDrawing(touchX, touchY);
 
-                        mTouchPointsHolder.addPoint(new Point((int) touchX, (int) touchY));
-                    }*/
+                           }else {
 
-                        //mTouchPointsHolder.addPoint(new Point((int) touchX, (int) touchY));
+                               continueDrawing(touchX, touchY);
 
-                        // Update previous point and invalidate to trigger redraw
-//                        mPreviousPoint.set(touchX, touchY);
-                       /* if (mTouchPointsHolder != null) {
-                            mHolderArrayList.add(mTouchPointsHolder);
-                            mTouchPointsHolder = new TouchPointsHolder(semiTransparentColor, mBrushSize);
-                            mTouchPointsHolder.addPoint(new Point((int) touchX, (int) touchY));
-                            invalidate();
-                        }*/
+                           }
 
-                    // Update previous point and invalidate to trigger redraw
-                    /*mPreviousPoint.set(touchX, touchY);
-                    if (mTouchPointsHolder != null) {
-                        mTouchPointsHolder.addPoint(new Point((int) touchX, (int) touchY));
-                        mHolderArrayList.add(mTouchPointsHolder);
-                        invalidate();
-                    }*/
+                       invalidate();
+                       break;
 
-                    continueDrawing(touchX, touchY);
+                   case MotionEvent.ACTION_UP:
+                   case MotionEvent.ACTION_CANCEL:
 
+                       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                           magnifier.dismiss();
+                       }
 
-                    invalidate();
-                    break;
+                       if (isRectangleMode){
+                           if (isDraggingRectangle) {
+                               // Moving an existing rectangle, do nothing
+                               // Reset the dragging flag to false
+                               isDraggingRectangle = false;
+                           } else {
+                               // Drawing a new rectangle, call the stopRectangleDrawing method as before
+                               stopRectangleDrawing();
+                           }
+                       }
+                       else if (isStraightLineMode) {
+                           stopStraightLineDrawing();
 
-                case MotionEvent.ACTION_UP:
-                case MotionEvent.ACTION_CANCEL:
+                       } else {
+                           stopDrawing();
 
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        magnifier.dismiss();
-                    }
+                       }
 
-                    /*if (mTouchPointsHolder != null) {
-                        mTouchPointsHolder.addPoint(new Point((int) touchX, (int) touchY));
-                        mHolderArrayList.add(mTouchPointsHolder);
-                        mTouchPointsHolder = null;
-                        invalidate();
-                    }*/
-
-                    stopDrawing();
-
-                    //new newInpaintActivity.CreateMaskTask().execute();
-                    break;
-
-                default:
-                    return true;
-            }
-
+                       break;
+                   default:
+                       return true;
+               }
+           }
         }
-
         return true;
     }
+
+    private void startStraightLineDrawing(float x, float y) {
+        currentPath = new Path();
+        currentPath.moveTo(x, y);
+        startStraightLinePoint = new PointF(x, y);
+    }
+
+    private void continueStraightLineDrawing(float x, float y) {
+        currentPath.reset();
+        currentPath.moveTo(startStraightLinePoint.x, startStraightLinePoint.y);
+
+        currentPath.lineTo(x, y);
+    }
+
+
+    private void stopStraightLineDrawing() {
+
+        if (mTouchPointsHolder != null) {
+            TouchPointsHolder touchPointsHolder = new TouchPointsHolder(semiTransparentColor, mTouchPointsHolder.getBrushThickness(), false, false);
+            touchPointsHolder.getPath().set(currentPath);
+            mHolderArrayList.add(touchPointsHolder);
+        }
+
+        currentPath = null;
+    }
+
+    private void startRectangleDrawing(float x, float y) {
+        // Initialize the starting coordinates of the rectangle
+        startX = x;
+        startY = y;
+        endX = x;
+        endY = y;
+
+        // Create a new path for the rectangle
+        currentPath = new Path();
+        currentPath.moveTo(startX, startY);
+        currentPath.lineTo(endX, endY);
+    }
+
+
+
+    private void continueRectangleDrawing(float x, float y) {
+        // Update the ending coordinates of the rectangle
+        endX = x;
+        endY = y;
+
+        // Reset the path and redraw the rectangle
+        currentPath.reset();
+        currentPath.moveTo(startX, startY);
+        currentPath.lineTo(endX, startY);
+        currentPath.lineTo(endX, endY);
+        currentPath.lineTo(startX, endY);
+        currentPath.lineTo(startX, startY);
+        currentPath.close();
+
+        // Invalidate the view to trigger redraw
+        invalidate();
+    }
+
+    private void stopRectangleDrawing() {
+        // Calculate the bounds of the rectangle
+        float left = Math.min(startX, endX);
+        float top = Math.min(startY, endY);
+        float right = Math.max(startX, endX);
+        float bottom = Math.max(startY, endY);
+
+        // Create a new path for the rectangle
+        currentPath = new Path();
+        currentPath.moveTo(left, top);
+        currentPath.lineTo(right, top);
+        currentPath.lineTo(right, bottom);
+        currentPath.lineTo(left, bottom);
+        currentPath.close();
+
+        if (mTouchPointsHolder != null) {
+            // Create a TouchPointsHolder to hold the rectangle path
+            TouchPointsHolder rectangleHolder = new TouchPointsHolder(semiTransparentColor, mTouchPointsHolder.getBrushThickness(), false, true);
+            rectangleHolder.getPath().set(currentPath);
+
+
+            // Add the rectangle to the list of drawings
+            mHolderArrayList.add(rectangleHolder);
+        }
+
+        // Reset the rectangle coordinates
+        startX = startY = endX = endY = 0;
+
+        currentPath.reset();
+        // Invalidate the view to trigger redraw
+        invalidate();
+    }
+
 
     private void startDrawing(float x, float y) {
         currentPath = new Path();
@@ -432,8 +587,12 @@ public class DrawingView extends View {
         currentX = x;
         currentY = y;
 
-        mCanvasPaint.setColor(semiTransparentColor);
-        mCanvasPaint.setStrokeWidth(mBrushSize);
+//        mCanvasPaint.setColor(semiTransparentColor);
+//        mCanvasPaint.setStrokeWidth(mBrushSize);
+
+        if (mTouchPointsHolder != null) {
+            mTouchPointsHolder.setBrushThickness(mBrushSize);
+        }
 
     }
 
@@ -447,93 +606,88 @@ public class DrawingView extends View {
         currentX = x;
         currentY = y;
 
+        if (mTouchPointsHolder == null) {
+            mTouchPointsHolder = new TouchPointsHolder(semiTransparentColor, mBrushSize, false, false);
+            mHolderArrayList.add(mTouchPointsHolder);
+        }
+
+        mTouchPointsHolder.setBrushThickness(mBrushSize);
+        //mTouchPointsHolder.getPath().set(currentPath);
+
+    }
+
+    private void stopDrawing() {
+
+        if (mTouchPointsHolder != null) {
+            TouchPointsHolder touchPointsHolder = new TouchPointsHolder(semiTransparentColor, mTouchPointsHolder.getBrushThickness(), false, false);
+            touchPointsHolder.getPath().set(currentPath);
+            mHolderArrayList.add(touchPointsHolder);
+        }
+
         if (mTouchPointsHolder != null) {
             mTouchPointsHolder.setBrushThickness(mBrushSize);
         }
 
-    }
-
-    private void stopDrawing() {
-        // Add the completed path to the drawArrayList
-        TouchPointsHolder touchPointsHolder = new TouchPointsHolder(semiTransparentColor, mBrushSize);
-        touchPointsHolder.getPath().set(currentPath);
-        mHolderArrayList.add(touchPointsHolder);
-
-        // Reset the currentPath
         currentPath.reset();
     }
 
-
-   /* private void startDrawing(float x, float y) {
-        currentPath = new Path();
-        currentPath.moveTo(x, y);
-
-        mCanvasPaint.setColor(semiTransparentColor);
-        mCanvasPaint.setStrokeWidth(mBrushSize);
-    }
-
-    private void continueDrawing(float x, float y) {
-        currentPath.lineTo(x, y);
-    }
-
-    private void stopDrawing() {
-        // Add the completed path to the drawArrayList
-        TouchPointsHolder touchPointsHolder = new TouchPointsHolder(semiTransparentColor, mBrushSize);
-        touchPointsHolder.getPath().set(currentPath);
-        mHolderArrayList.add(touchPointsHolder);
-
-        // Reset the currentPath
-        currentPath.reset();
-    }*/
 
     public void setSizeForBrush(float progress) {
-        // Define minimum and maximum brush sizes
-        float minBrushSize = 5f;
+
+        float minBrushSize = 15f;
         float maxBrushSize = 50f;
 
         float resolutionFactor = 0.02f;
         float adjustedBrushSize = progress + resolutionFactor * progress;
 
-
-        /*// Limit the brush size within the specified range
-        if (progress < minBrushSize) {
-            mBrushSize = minBrushSize;
-        } else if (progress > maxBrushSize) {
-            mBrushSize = maxBrushSize;
-        } else {
-            mBrushSize = progress;
-        }*/
+        // multiply the brush size by the scale factor
+        adjustedBrushSize *= scaleFactor;
 
         mBrushSize = Math.max(minBrushSize, Math.min(adjustedBrushSize, maxBrushSize));
 
-        // Set the stroke width for the paint
         mCanvasPaint.setStrokeWidth(mBrushSize);
+
+        mBrushPreviewView.setBrushSize(mBrushSize);
+
     }
 
-    public void updateBrushSizeForImage(float imageWidth, float imageHeight) {
+    /*public void updateBrushSizeForImage(float imageWidth, float imageHeight) {
+        // Define the threshold for image dimensions
+        float thresholdDimension = 2000f;
+
+        // Define the base brush size for normal cases
+        float baseBrushSize = 10f;
+
+        // Define the maximum visible brush size
+        float maxVisibleBrushSize = 50f;
+
         // Calculate the average dimension to get a single representative value
         float averageDimension = (imageWidth + imageHeight) / 2f;
 
-        // Define a maximum visible brush size
-        float maxVisibleBrushSize = 50f;
-
-        // Set a base brush size (you can adjust this value)
-        float baseBrushSize = 10f;
-
-        // Calculate the dynamic factor based on the resolution
-        float resolutionFactor = 1f - Math.min(1f, averageDimension / 2000f);
-
-        // Calculate the adjusted brush size using the dynamic factor
-        float adjustedBrushSize = baseBrushSize + baseBrushSize * resolutionFactor;
-
-        // Ensure the adjusted brush size stays within the maximum visible size
-        adjustedBrushSize = Math.min(adjustedBrushSize, maxVisibleBrushSize);
-
-        // Set the size for the brush
-        setSizeForBrush(adjustedBrushSize);
+        // Check if the image dimensions exceed the threshold
+        if (averageDimension > thresholdDimension) {
+            baseBrushSize = calculateBaseBrushSize(imageWidth, imageHeight);
+            float adjustedBrushSize = calculateAdjustedBrushSize(baseBrushSize, maxVisibleBrushSize, averageDimension, thresholdDimension);
+            setSizeForBrush(adjustedBrushSize);
+        } else {
+            // Set the size for the brush for normal cases
+            setSizeForBrush(baseBrushSize);
+        }
     }
 
-   /* public void setSizeForBrush(float progress) {
+    private float calculateBaseBrushSize(float imageWidth, float imageHeight) {
+        // Adjust this factor based on experimentation to get a suitable base brush size for larger images
+        float baseBrushSizeFactor = 0.010f;
+        return (imageWidth + imageHeight) / 2f * baseBrushSizeFactor;
+    }
+
+    private float calculateAdjustedBrushSize(float baseBrushSize, float maxVisibleBrushSize, float averageDimension, float thresholdDimension) {
+        float resolutionFactor = 1f - Math.min(1f, averageDimension / thresholdDimension);
+        float adjustedBrushSize = baseBrushSize + baseBrushSize * resolutionFactor;
+        return Math.min(adjustedBrushSize, maxVisibleBrushSize);
+    }*/
+
+    /* public void setSizeForBrush(float progress) {
         float minBrushSize = 5f; // Minimum brush size
         float maxBrushSize = 100f; // Maximum brush size
 
@@ -555,9 +709,10 @@ public class DrawingView extends View {
         color = Color.parseColor(newColor);
         mDrawPaint.setColor(color);
     }*/
+
     private File saveBitmapToCache(Bitmap bitmap, File directory) {
         long timeStamp = System.currentTimeMillis();
-        String filename = timeStamp + ".png";
+        String filename = timeStamp + "." + originalExtension;
 
         File file = new File(directory, filename);
 
@@ -591,26 +746,6 @@ public class DrawingView extends View {
             invalidate();
         }
     }
-
-    /*public void undo() {
-        if (mHolderArrayList.size() > 0) {
-            int lastIndex = mHolderArrayList.size() - 1;
-            TouchPointsHolder removedHolder = mHolderArrayList.remove(lastIndex);
-            mPathsUndoo.add(removedHolder);
-            invalidate();
-        }
-    }
-
-    public void redo() {
-        if (mPathsUndoo.size() > 0) {
-            int lastIndex = mPathsUndoo.size() - 1;
-            TouchPointsHolder redoHolder = mPathsUndoo.remove(lastIndex);
-            mHolderArrayList.add(redoHolder);
-            invalidate();
-        }
-    }*/
-
-
 
 }
 
