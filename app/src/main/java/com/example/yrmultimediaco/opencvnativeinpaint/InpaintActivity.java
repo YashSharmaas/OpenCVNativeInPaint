@@ -71,7 +71,7 @@ public class InpaintActivity extends AppCompatActivity {
     private PhotoView photoView;
     private ImageView selectedImageView;
     private TextView selectedTextColor;
-    private static DrawingView drawingView ;
+    private DrawingView drawingView ;
     private ImageView undo, redo, compareImg;
     private LinearLayout seekBarSelectionBtnLayout, inPaintedImageBtnLayout, brushTypeStraightLineBtnLayout, brushTypeFreeHandBtnLayout, brushTypeRectangleBtnLayout, brushContainer, resetLayout;
     private ImageView selectImage, inPaintButton, brushImage, brushTypeImage, brushFreeHand, brushRectangle, brushStraightLine, resetImage;
@@ -80,6 +80,7 @@ public class InpaintActivity extends AppCompatActivity {
     private SeekBar seekBar;
     private RelativeLayout expandedLayout, brushTypeExpandedLayout;
     private ProgressBar mProgressBar;
+    private RelativeLayout progressBarLayout;
     private Context context;
     private Bitmap inpaintedBitmap;
     private Bitmap originalBitmap;
@@ -124,6 +125,7 @@ public class InpaintActivity extends AppCompatActivity {
         brushImage = findViewById(R.id.brushImage);
         compareImg = findViewById(R.id.compareImage);
         mProgressBar = findViewById(R.id.progress_bar);
+        progressBarLayout = findViewById(R.id.progressBarLayout);
         mBrushPreviewView = findViewById(R.id.brushPreviewView);
         brushSizeText = findViewById(R.id.brushSizeTextView);
         resultScreen = findViewById(R.id.done);
@@ -149,7 +151,8 @@ public class InpaintActivity extends AppCompatActivity {
         brushTypeRectangleBtnLayout = findViewById(R.id.brushTypeRectangleBtnLayout);
         mToolbar = findViewById(R.id.toolbar);
 
-        mProgressBar.setVisibility(View.GONE);
+        //mProgressBar.setVisibility(View.GONE);
+        progressBarLayout.setVisibility(View.GONE);
 
         setSupportActionBar(mToolbar);
 
@@ -411,19 +414,36 @@ public class InpaintActivity extends AppCompatActivity {
             inpaintedBitmap = null;
 
             resetSourceImagePath();
-            Glide.with(this)
-                    .asBitmap()
-                    .load(originalImagePath)
-                    .into(new CustomTarget<Bitmap>() {
-                        @Override
-                        public void onResourceReady(@NonNull Bitmap resource, @Nullable Transition<? super Bitmap> transition) {
-                            photoView.setImageBitmap(resource);
-                        }
 
-                        @Override
-                        public void onLoadCleared(@Nullable Drawable placeholder) {
-                        }
-                    });
+            File originalFile = new File(originalImagePath);
+
+            BitmapFactory.Options options = new BitmapFactory.Options();
+            options.inJustDecodeBounds = true;
+            BitmapFactory.decodeFile(originalFile.getPath(), options);
+
+            int originalWidth = options.outWidth;
+            int originalHeight = options.outHeight;
+
+            if (originalWidth > 1500 || originalHeight > 1500) {
+                // Image needs to be resized
+                loadResizedImage(originalFile);
+            }else {
+                Glide.with(this)
+                        .asBitmap()
+                        .load(originalImagePath)
+                        .into(new CustomTarget<Bitmap>() {
+                            @Override
+                            public void onResourceReady(@NonNull Bitmap resource, @Nullable Transition<? super Bitmap> transition) {
+                                photoView.setImageBitmap(resource);
+                            }
+
+                            @Override
+                            public void onLoadCleared(@Nullable Drawable placeholder) {
+                            }
+                        });
+            }
+
+
 
         } else {
             Toast.makeText(context, "First remove the objects you want", Toast.LENGTH_SHORT).show();
@@ -799,8 +819,9 @@ public class InpaintActivity extends AppCompatActivity {
             newWidth = Math.round(desiredHeight * aspectRatio);
         }
 
-        Bitmap originalBitmap = BitmapFactory.decodeFile(sourceFile.getPath());
-        Bitmap resizedBitmap = Bitmap.createScaledBitmap(originalBitmap, newWidth, newHeight, true);
+        Bitmap sourceOriginalBitmap = BitmapFactory.decodeFile(sourceFile.getPath());
+        Bitmap resizedBitmap = Bitmap.createScaledBitmap(sourceOriginalBitmap, newWidth, newHeight, true);
+        originalBitmap = resizedBitmap;
 
         // Save the resized image to a file
         File resizeFile = new File(resizeImageDIr(), System.currentTimeMillis() + "." + fileExtension);
@@ -834,7 +855,8 @@ public class InpaintActivity extends AppCompatActivity {
         @Override
         protected void onPreExecute() {
             super.onPreExecute();
-            mProgressBar.setVisibility(View.VISIBLE);
+            //mProgressBar.setVisibility(View.VISIBLE);
+            progressBarLayout.setVisibility(View.VISIBLE);
         }
 
         @Override
@@ -866,7 +888,8 @@ public class InpaintActivity extends AppCompatActivity {
         @Override
         protected void onPostExecute(Void unused) {
             super.onPostExecute(unused);
-            mProgressBar.setVisibility(View.INVISIBLE);
+            //mProgressBar.setVisibility(View.INVISIBLE);
+            progressBarLayout.setVisibility(View.INVISIBLE);
 
             drawingView.clearDrawing();
         }

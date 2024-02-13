@@ -239,6 +239,11 @@ public class DrawingView extends View {
                 mFilledRectanglePaint.setStrokeWidth(mTouchPointsHolder.getBrushThickness());
 
                 canvas.drawPath(currentPath, mFilledRectanglePaint);
+            } else if (isStraightLineMode) {
+                mCanvasPaint.setColor(semiTransparentColor);
+                mCanvasPaint.setStrokeWidth(mTouchPointsHolder.getBrushThickness());
+
+                canvas.drawPath(currentPath, mCanvasPaint);
             } else {
                 mCanvasPaint.setColor(semiTransparentColor);
                 mCanvasPaint.setStrokeWidth(mTouchPointsHolder.getBrushThickness());
